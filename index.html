@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Анкета</title>
+<script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f4f4f7;
+    margin: 0;
+    padding: 20px;
+    color: #222;
+  }
+  h1 { font-size: 20px; margin-bottom: 16px; }
+  .field { margin-bottom: 14px; }
+  label { display: block; font-size: 14px; margin-bottom: 6px; color: #555; }
+  input, textarea, select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    font-size: 15px;
+    background: #fff;
+  }
+  textarea { resize: vertical; min-height: 70px; }
+  button {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: #2688eb;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    margin-top: 10px;
+  }
+  button:disabled { background: #a9c9ec; }
+  .status { text-align: center; margin-top: 16px; font-size: 14px; color: #555; }
+  .success { text-align: center; padding: 40px 10px; }
+  .success h2 { margin-bottom: 8px; }
+  .success p { color: #666; margin-bottom: 24px; }
+  .write-btn {
+    display: inline-block;
+    background: #2688eb;
+    color: #fff;
+    text-decoration: none;
+    padding: 14px 28px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<div id="form-screen">
+  <h1>Анкета</h1>
+  <form id="anketaForm">
+    <div class="field">
+      <label>Имя</label>
+      <input type="text" name="name" required>
+    </div>
+
+    <div class="field">
+      <label>Какая услуга интересует?</label>
+      <select name="service" required>
+        <option value="" disabled selected>Выберите услугу</option>
+        <option>Индивидуальная сессия</option>
+        <option>Женский клуб</option>
+        <option>Девичник</option>
+        <option>Мастер-класс «Самопомощь при стрессе»</option>
+        <option>Йога индивидуально / мини-группа</option>
+        <option>Дыхательные техники</option>
+        <option>Медитация</option>
+        <option>Мини-курс в записи «Йога дома»</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Какое время более удобное?</label>
+      <select name="time" required>
+        <option value="" disabled selected>Выберите время</option>
+        <option>Утро</option>
+        <option>День</option>
+        <option>Вечер</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Опишите в паре предложений, что вас волнует</label>
+      <textarea name="worry" required></textarea>
+    </div>
+
+    <div class="field">
+      <label>Что хотите получить от работы?</label>
+      <textarea name="goal" required></textarea>
+    </div>
+
+    <button type="submit" id="submitBtn">Отправить анкету</button>
+  </form>
+  <div class="status" id="status"></div>
+</div>
+
+<div id="success-screen" style="display:none" class="success">
+  <h2>Анкета отправлена!</h2>
+  <p>Мы уже написали вам в личные сообщения.</p>
+  <a class="write-btn" id="writeBtn" href="#" target="_blank">Написать в личку</a>
+</div>
+
+<script>
+  // ==== НАСТРОЙКИ, КОТОРЫЕ НУЖНО ПОДСТАВИТЬ ====
+  const GROUP_ID = 000000000; // id сообщества (положительное число, без минуса)
+  const BACKEND_URL = "/api/submit"; // на Vercel форма и функция живут на одном домене, менять не нужно
+  // ================================================
+
+  let vkUser = null;
+
+  async function init() {
+    await vkBridge.send('VKWebAppInit', {});
+    try {
+      vkUser = await vkBridge.send('VKWebAppGetUserInfo', {});
+    } catch (e) {
+      console.warn('Не удалось получить данные пользователя', e);
+    }
+    document.getElementById('writeBtn').href = `https://vk.me/write-${GROUP_ID}`;
+  }
+
+  init();
+
+  document.getElementById('anketaForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    const status = document.getElementById('status');
+    btn.disabled = true;
+    status.textContent = 'Отправляем...';
+
+    const formData = new FormData(e.target);
+    const answers = Object.fromEntries(formData.entries());
+
+    // Запрашиваем у пользователя разрешение на сообщения от сообщества.
+    // Без этого группа не сможет написать первой.
+    let allowed = false;
+    try {
+      const res = await vkBridge.send('VKWebAppAllowMessagesFromGroup', {
+        group_id: GROUP_ID,
+        key: 'anketa'
+      });
+      allowed = !!res.result;
+    } catch (err) {
+      // Пользователь мог уже разрешить сообщения ранее — VK в этом случае
+      // тоже может вернуть ошибку, поэтому не блокируем отправку анкеты.
+      console.warn('Разрешение на сообщения не получено', err);
+    }
+
+    try {
+      const resp = await fetch(BACKEND_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vk_user_id: vkUser ? vkUser.id : null,
+          allowed_messages: allowed,
+          answers
+        })
+      });
+
+      if (!resp.ok) throw new Error('Ошибка сервера');
+
+      document.getElementById('form-screen').style.display = 'none';
+      document.getElementById('success-screen').style.display = 'block';
+    } catch (err) {
+      console.error(err);
+      status.textContent = 'Что-то пошло не так, попробуйте ещё раз.';
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
