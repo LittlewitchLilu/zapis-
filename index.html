@@ -105,8 +105,7 @@
 
 <div id="success-screen" style="display:none" class="success">
   <h2>Анкета отправлена!</h2>
-  <p>Мы уже написали вам в личные сообщения.</p>
-  <a class="write-btn" id="writeBtn" href="#">Написать в личку</a>
+  <p>Анкета уже у Вас в личных сообщениях, можете продолжить диалог там.</p>
 </div>
 
 <script>
@@ -124,12 +123,6 @@
     } catch (e) {
       console.warn('Не удалось получить данные пользователя', e);
     }
-    const writeUrl = `https://vk.me/write-${GROUP_ID}`;
-    document.getElementById('writeBtn').href = writeUrl;
-    document.getElementById('writeBtn').addEventListener('click', (e) => {
-      e.preventDefault();
-      window.open(writeUrl, '_blank', 'noreferrer');
-    });
   }
 
   init();
